@@ -1,0 +1,199 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>สร้าง QR Code ยา</title>
+
+<style>
+* { box-sizing: border-box; }
+body {
+  font-family: Arial,sans-serif;
+  margin: 0;
+  background: #f1f5f9;
+  color: #1e293b;
+}
+nav {
+  background: #1e3a8a;
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+nav a {
+  color: white;
+  text-decoration: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+}
+nav a:hover, nav a.active { background: #3b82f6; }
+.container {
+  max-width: 550px;
+  margin: 30px auto;
+  padding: 25px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 3px 15px #00000010;
+}
+h1 { color: #1e3a8a; text-align: center; }
+input {
+  width: 100%;
+  padding: 12px;
+  margin: 8px 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 16px;
+}
+button {
+  padding: 11px 18px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  font-size: 15px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+button:hover { opacity: .85; }
+#qr {
+  display: flex;
+  justify-content: center;
+  margin: 25px auto;
+}
+#label { text-align: center; }
+.info {
+  background: #eff6ff;
+  padding: 12px;
+  border-radius: 8px;
+  color: #1e40af;
+  font-size: 14px;
+}
+</style>
+</head>
+
+<body>
+
+<nav>
+  <a href="index.html">หน้าหลัก</a>
+  <a href="qr.html" class="active">สร้าง QR Code ยา</a>
+  <a href="stock.html">เบิก / เติมยา</a>
+</nav>
+
+<div class="container">
+
+<h1>สร้าง QR Code ยา</h1>
+
+<p class="info">
+กรอกรหัสยาและชื่อยาเพื่อบันทึกเข้าฐานข้อมูลกลาง
+</p>
+
+<input id="code" placeholder="รหัสยา เช่น P001">
+<input id="name" placeholder="ชื่อยา เช่น Paracetamol 500mg">
+
+<button onclick="makeQR()">บันทึกและสร้าง QR</button>
+
+<div id="qr"></div>
+<p id="label"></p>
+
+<button id="download" onclick="downloadQR()" hidden>
+ดาวน์โหลด QR Code
+</button>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<script>
+function getData(key, fallback) {
+  try {
+    return JSON.parse(localStorage.getItem(key)) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+let currentQR = null;
+
+function makeQR() {
+  const code = document.getElementById("code").value.trim();
+  const name = document.getElementById("name").value.trim();
+
+  if (!code || !name) {
+    alert("กรุณากรอกรหัสและชื่อยาให้ครบ");
+    return;
+  }
+
+  if (code.includes("|") || name.includes("|")) {
+    alert("ห้ามใช้เครื่องหมาย | ในรหัสหรือชื่อยา");
+    return;
+  }
+
+  if (typeof QRCode === "undefined") {
+    alert("โหลดระบบสร้าง QR ไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต");
+    return;
+  }
+
+  const medicines = getData("medicines", {});
+
+  if (medicines[code]) {
+    if (!confirm("รหัสยานี้มีอยู่แล้ว ต้องการอัปเดตชื่อยาหรือไม่?")) {
+      return;
+    }
+  }
+
+  // เพิ่มหรืออัปเดตข้อมูลโดยรักษาสต็อกเดิม
+  medicines[code] = {
+    code: code,
+    name: name,
+    qty: Number(medicines[code]?.qty || 0)
+  };
+
+  localStorage.setItem("medicines", JSON.stringify(medicines));
+
+  const text = code + "|" + name;
+
+  const box = document.getElementById("qr");
+  box.innerHTML = "";
+
+  new QRCode(box, {
+    text: text,
+    width: 220,
+    height: 220,
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  document.getElementById("label").textContent =
+    code + " - " + name + " (บันทึกเข้าระบบแล้ว)";
+
+  document.getElementById("download").hidden = false;
+
+  currentQR = { code, name };
+}
+
+function downloadQR() {
+  const box = document.getElementById("qr");
+  const canvas = box.querySelector("canvas");
+
+  if (canvas) {
+    const a = document.createElement("a");
+    a.download = currentQR.code + ".png";
+    a.href = canvas.toDataURL("image/png");
+    a.click();
+    return;
+  }
+
+  const img = box.querySelector("img");
+
+  if (img) {
+    const a = document.createElement("a");
+    a.download = currentQR.code + ".png";
+    a.href = img.src;
+    a.click();
+  }
+}
+</script>
+
+</body>
+</html>

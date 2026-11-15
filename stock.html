@@ -1,0 +1,472 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ระบบเบิก / เติมยา</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  font-family: Arial,sans-serif;
+  margin: 0;
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+nav {
+  background: #1e3a8a;
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+nav a {
+  color: white;
+  text-decoration: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+}
+
+nav a:hover, nav a.active {
+  background: #3b82f6;
+}
+
+.container {
+  max-width: 900px;
+  margin: 30px auto;
+  padding: 0 18px;
+}
+
+h1,h2 { color: #1e3a8a; }
+
+.card {
+  background: white;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 14px;
+  box-shadow: 0 3px 12px #00000008;
+}
+
+#reader {
+  width: 100%;
+  max-width: 500px;
+  margin: auto;
+}
+
+button, select, input {
+  padding: 11px;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+button {
+  border: none;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+  margin: 5px 3px;
+}
+
+button:hover { opacity: .85; }
+
+.stop { background: #64748b; }
+.save { background: #059669; }
+
+input[type=number], select {
+  border: 1px solid #cbd5e1;
+}
+
+#card {
+  display: none;
+  background: #eff6ff;
+  padding: 20px;
+  border-radius: 12px;
+  margin-top: 15px;
+}
+
+#qty {
+  width: 110px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  margin-top: 12px;
+}
+
+th,td {
+  border: 1px solid #e2e8f0;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th { background: #eaf0f9; }
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+#status {
+  color: #64748b;
+  text-align: center;
+}
+</style>
+</head>
+
+<body>
+
+<nav>
+  <a href="index.html">หน้าหลัก</a>
+  <a href="qr.html">สร้าง QR Code ยา</a>
+  <a href="stock.html" class="active">เบิก / เติมยา</a>
+</nav>
+
+<div class="container">
+
+<h1>ระบบเบิก / เติมยา</h1>
+
+<div class="card">
+  <h2>สแกน QR Code</h2>
+
+  <div id="reader"></div>
+
+  <div style="text-align:center">
+    <button onclick="startScan()">เปิดกล้องสแกน</button>
+    <button class="stop" onclick="stopScan()">ปิดกล้อง</button>
+  </div>
+
+  <p id="status">พร้อมใช้งาน</p>
+
+  <p>หรือเลือกยาจากรายการที่ลงทะเบียนไว้</p>
+
+  <select id="drugSelect" onchange="selectDrug()">
+    <option value="">-- เลือกยา --</option>
+  </select>
+</div>
+
+<div id="card" class="card">
+
+  <h2 id="drugName"></h2>
+
+  <p>รหัสยา: <b id="drugCode"></b></p>
+
+  <p>จำนวนคงเหลือ:
+    <b id="drugStock">0</b>
+  </p>
+
+  <hr>
+
+  <p>ประเภทการทำรายการ</p>
+
+  <label>
+    <input type="radio" name="type" value="เบิก" checked>
+    เบิกยา
+  </label>
+
+  <label>
+    <input type="radio" name="type" value="เติม">
+    เติมยา
+  </label>
+
+  <p>
+    จำนวน:
+    <input type="number" id="qty" min="1" step="1" value="1">
+  </p>
+
+  <button class="save" onclick="save()">บันทึก</button>
+  <button class="stop" onclick="closeCard()">ยกเลิก</button>
+
+</div>
+
+<div class="card">
+  <h2>สต็อกยาคงเหลือ</h2>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>รหัสยา</th>
+          <th>ชื่อยา</th>
+          <th>คงเหลือ</th>
+        </tr>
+      </thead>
+      <tbody id="stockTable"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>ประวัติการเบิก / เติม</h2>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>วันที่</th>
+          <th>ยา</th>
+          <th>ประเภท</th>
+          <th>จำนวน</th>
+        </tr>
+      </thead>
+      <tbody id="logTable"></tbody>
+    </table>
+  </div>
+</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+
+<script>
+function getData(key, fallback) {
+  try {
+    return JSON.parse(localStorage.getItem(key)) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+let medicines = getData("medicines", {});
+let logs = getData("log", []);
+let current = null;
+let scanning = false;
+let qr = null;
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = String(s ?? "");
+  return d.innerHTML;
+}
+
+function refreshData() {
+  medicines = getData("medicines", {});
+  logs = getData("log", []);
+  render();
+}
+
+function selectDrug() {
+  const code = document.getElementById("drugSelect").value;
+
+  if (!code) {
+    closeCard();
+    return;
+  }
+
+  showDrug(code);
+}
+
+function showDrug(code) {
+  refreshData();
+
+  const drug = medicines[code];
+
+  if (!drug) {
+    alert("ไม่พบข้อมูลยานี้ กรุณาลงทะเบียนที่หน้าสร้าง QR Code ก่อน");
+    return;
+  }
+
+  current = {
+    code: code,
+    name: drug.name
+  };
+
+  document.getElementById("drugName").textContent = drug.name;
+  document.getElementById("drugCode").textContent = code;
+  document.getElementById("drugStock").textContent = drug.qty || 0;
+  document.getElementById("qty").value = 1;
+  document.getElementById("card").style.display = "block";
+
+  document.getElementById("card").scrollIntoView({
+    behavior: "smooth"
+  });
+}
+
+function startScan() {
+  if (scanning) return;
+
+  if (typeof Html5Qrcode === "undefined") {
+    alert("โหลดระบบสแกน QR ไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต");
+    return;
+  }
+
+  if (!qr) qr = new Html5Qrcode("reader");
+
+  scanning = true;
+
+  document.getElementById("status").textContent =
+    "กำลังเปิดกล้อง...";
+
+  qr.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
+    onScan
+  ).then(() => {
+    document.getElementById("status").textContent =
+      "กำลังสแกน QR Code";
+  }).catch(err => {
+    scanning = false;
+    document.getElementById("status").textContent =
+      "ไม่สามารถเปิดกล้องได้";
+    alert("เปิดกล้องไม่ได้: " + err);
+  });
+}
+
+function stopScan() {
+  if (!qr || !scanning) return;
+
+  scanning = false;
+
+  qr.stop().then(() => {
+    document.getElementById("status").textContent =
+      "ปิดกล้องแล้ว";
+  }).catch(() => {});
+}
+
+function onScan(text) {
+  if (!scanning) return;
+
+  scanning = false;
+
+  qr.stop().catch(() => {});
+
+  let code = "";
+
+  // รองรับรูปแบบ QR: รหัสยา|ชื่อยา
+  try {
+    const data = JSON.parse(text);
+    code = data.code || "";
+  } catch {
+    code = text.split("|")[0].trim();
+  }
+
+  document.getElementById("status").textContent =
+    "สแกนสำเร็จ";
+
+  if (!medicines[code]) {
+    alert("ไม่พบรหัสยา " + code +
+      " กรุณาลงทะเบียนยาที่หน้าสร้าง QR Code");
+    return;
+  }
+
+  document.getElementById("drugSelect").value = code;
+  showDrug(code);
+}
+
+function closeCard() {
+  current = null;
+  document.getElementById("card").style.display = "none";
+  document.getElementById("drugSelect").value = "";
+}
+
+function save() {
+  if (!current) return;
+
+  // อ่านฐานข้อมูลล่าสุดก่อนบันทึก
+  medicines = getData("medicines", {});
+  logs = getData("log", []);
+
+  const qty = Number(document.getElementById("qty").value);
+
+  const type = document.querySelector(
+    'input[name="type"]:checked'
+  ).value;
+
+  if (!Number.isSafeInteger(qty) || qty < 1) {
+    alert("กรุณากรอกจำนวนเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป");
+    return;
+  }
+
+  const drug = medicines[current.code];
+
+  if (!drug) {
+    alert("ไม่พบข้อมูลยา กรุณาลงทะเบียนใหม่");
+    return;
+  }
+
+  if (type === "เบิก") {
+    if (qty > drug.qty) {
+      alert("ยาในสต็อกไม่เพียงพอ");
+      return;
+    }
+
+    drug.qty -= qty;
+
+  } else {
+    drug.qty += qty;
+  }
+
+  logs.unshift({
+    time: new Date().toLocaleString("th-TH"),
+    code: current.code,
+    name: drug.name,
+    type: type,
+    qty: qty
+  });
+
+  localStorage.setItem("medicines", JSON.stringify(medicines));
+  localStorage.setItem("log", JSON.stringify(logs));
+
+  alert("บันทึกข้อมูลเรียบร้อยแล้ว");
+
+  closeCard();
+  refreshData();
+}
+
+function render() {
+  const stockTable = document.getElementById("stockTable");
+  const logTable = document.getElementById("logTable");
+  const drugSelect = document.getElementById("drugSelect");
+
+  const codes = Object.keys(medicines);
+
+  stockTable.innerHTML = codes.length
+    ? codes.map(code => `
+      <tr>
+        <td>${esc(code)}</td>
+        <td>${esc(medicines[code].name)}</td>
+        <td>${Number(medicines[code].qty || 0)}</td>
+      </tr>
+    `).join("")
+    : '<tr><td colspan="3">ยังไม่มีข้อมูลยา</td></tr>';
+
+  logTable.innerHTML = logs.length
+    ? logs.map(r => `
+      <tr>
+        <td>${esc(r.time)}</td>
+        <td>${esc(r.name)}</td>
+        <td>${esc(r.type)}</td>
+        <td>${Number(r.qty)}</td>
+      </tr>
+    `).join("")
+    : '<tr><td colspan="4">ยังไม่มีประวัติ</td></tr>';
+
+  const previous = drugSelect.value;
+
+  drugSelect.innerHTML =
+    '<option value="">-- เลือกยา --</option>' +
+    codes.map(code => `
+      <option value="${esc(code)}">
+        ${esc(code)} - ${esc(medicines[code].name)}
+      </option>
+    `).join("");
+
+  if (codes.includes(previous)) {
+    drugSelect.value = previous;
+  }
+}
+
+render();
+
+window.addEventListener("pageshow", refreshData);
+window.addEventListener("storage", refreshData);
+</script>
+
+</body>
+</html>
